@@ -1,0 +1,107 @@
+[env]
+# backend app
+DEV = true
+PROD = false
+MONGODB_PORT = "27064"
+MONGODB_URI ="mongodb://localhost:${MONGODB_PORT}"
+DB_NAME= "<db_name>"
+JWT_SECRET = "<jwt_secret>"
+
+# deploy script 
+BRANCH =  { script = ["git branch --show-current"] }
+IMAGE_NAME = { script = ["echo $(node ./build-image.js)"] } 
+IMAGE_TAG =  { script = ["echo sha-$(git rev-parse --short HEAD)"] }
+COMMIT_MESSAGE = { script = ["git show -s --format='%h %s'"] } 
+REGISTRY =  "<your_registry>"
+
+
+[config]
+main_project_member = "./backend/api"
+default_to_workspace = false
+
+[tasks.setup]
+script_runner="@shell"
+script = '''
+	cargo install cargo-watch
+	cargo install cargo-nextest --locked
+'''
+
+[tasks.default]
+alias = "dev"
+
+# Backend 
+[tasks.backend-build]
+description = "Runs the rust compiler."
+category = "Build"
+command = "cargo"
+args = ["build"]
+
+[tasks.backend]
+env = { RUST_LOG = "debug, mongodb::command=debug", CARGO_LOG = "info"  }
+env_files = [".env"]
+
+script_runner = "@shell"
+script =  '''
+	cd backend && cargo watch -x 'run --bin api'  
+'''
+
+[tasks.backend-test]
+env = { RUST_LOG = "info", CARGO_LOG = "info" }
+env_files = [".env"]
+
+script_runner = "@shell"
+script =  '''
+	cd backend && cargo watch -x 'nextest run --no-capture'
+'''
+[tasks.domain-test]
+env = { RUST_LOG = "info", CARGO_LOG = "info" }
+env_files = [".env"]
+
+script_runner = "@shell"
+script =  '''
+	cd backend && cargo test ${@}
+'''
+
+
+[tasks.backend-dev]
+run_task = [
+    { name = ["backend", "mongodb"], parallel = true },
+]
+
+# Frontend 
+[tasks.web]
+script_runner = "@shell"
+script = '''
+	cd apps && pnpm --filter web dev
+'''
+
+[tasks.admin]
+script_runner = "@shell"
+script = '''
+	cd apps && pnpm --filter admin dev
+'''
+
+# Kube & Docker
+# example: cargo make docker <ui|backend>~>${1}
+[tasks.mongodb]
+command = "docker"
+args = [
+    "run", "--rm", "--name", "init-db", "-i", "-p", "27064:27017", "--volume", "/tmp/mongodb:/data/db", "mongo"
+]
+
+
+[tasks.docker]
+script_runner = "@shell"
+script =  '''
+	echo Build image for environment: ${IMAGE_NAME}
+	docker build --build-arg DESCRIPTION="${COMMIT_MESSAGE}" \
+		--tag ${REGISTRY}/${1}-${IMAGE_NAME}:${IMAGE_TAG} \
+		--tag  ${REGISTRY}/${1}-${IMAGE_NAME}:latest \
+		-f ./${1}/Dockerfile ./${1}/
+'''
+
+[tasks.pub]
+script_runner = "@shell"
+script =  '''
+ 	docker push ${REGISTRY}/${1}-${IMAGE_NAME} -a
+'''

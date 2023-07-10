@@ -1,0 +1,14 @@
+debug
+target
+tmp
+.env
+
+backend/target
+backend/dist
+backend/tmp
+backend/.env
+
+apps/node_modules
+apps/*/dist
+
+requests/production
