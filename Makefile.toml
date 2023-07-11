@@ -22,6 +22,8 @@ default_to_workspace = false
 [tasks.setup]
 script_runner="@shell"
 script = '''
+	rm -rf .git
+	mkdir ./tmp
 	cargo install cargo-watch
 	cargo install cargo-nextest --locked
 '''
